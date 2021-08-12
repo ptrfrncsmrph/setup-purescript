@@ -20,13 +20,13 @@ import Effect.Exception (Error)
 import GitHub.Actions.Core as Core
 import Setup.Data.Key (Key)
 import Setup.Data.Key as Key
-import Setup.Data.Tool (Tool)
+import Setup.Data.Tool (InstallMethod, Tool)
 import Setup.Data.Tool as Tool
 import Text.Parsing.Parser (parseErrorMessage)
 import Text.Parsing.Parser as ParseError
 
 -- | The list of tools that should be downloaded and cached by the action
-type BuildPlan = Array { tool :: Tool, version :: Version }
+type BuildPlan = Array { tool :: Tool, installMethod :: InstallMethod }
 
 -- | Construct the list of tools that sholud be downloaded and cached by the action
 constructBuildPlan :: Json -> ExceptT Error Effect BuildPlan
@@ -53,7 +53,7 @@ getVersionField key = do
 
 -- | Resolve the exact version to provide for a tool in the environment, based
 -- | on the action.yml file.
-resolve :: Json -> Tool -> ExceptT Error Effect (Maybe { tool :: Tool, version :: Version })
+resolve :: Json -> Tool -> ExceptT Error Effect (Maybe { tool :: Tool, installMethod :: InstallMethod })
 resolve versionsContents tool = do
   let key = Key.fromTool tool
   field <- getVersionField key
@@ -62,7 +62,7 @@ resolve versionsContents tool = do
 
     Just (Exact v) -> liftEffect do
       Core.info "Found exact version"
-      pure (pure { tool, version: v })
+      pure (pure { tool, installMethod: Tool.installMethod tool v })
 
     Just Latest -> liftEffect do
       Core.info $ fold [ "Fetching latest tag for ", Tool.name tool ]
@@ -77,4 +77,4 @@ resolve versionsContents tool = do
           throwError $ error "Unable to complete fetching version."
 
         Right v -> do
-          pure (pure { tool, version: v })
+          pure (pure { tool, installMethod: Tool.installMethod tool v })

@@ -79,11 +79,12 @@ repository = case _ of
 -- | at a particular version.
 data InstallMethod = Tarball TarballOpts | NPM NPMPackage
 
--- | The source used to download a tarball and its path inside the extracted
--- | directory.
+-- | The source used to download a tarball, its path inside the extracted
+-- | directory, and the version to install.
 type TarballOpts =
   { source :: URL
   , getExecutablePath :: FilePath -> FilePath
+  , version :: String
   }
 
 -- | An NPM package. Example: "purescript-psa@0.7.2"
@@ -96,9 +97,11 @@ installMethod tool version = do
   let
     toolName = name tool
     toolRepo = repository tool
-    formatArgs = { repo: toolRepo, tag: formatTag, tarball: _ }
+    versionStr = Version.showVersion version
 
-    formatGitHub' = formatGitHub <<< formatArgs
+    formatArgs = { repo: toolRepo, tag: _, tarball: _ }
+
+    formatGitHub' = map formatGitHub <<< formatArgs
 
     unsafeVersion str = fromRight' (\_ -> unsafeCrashWith "Unexpected Left") $ parseVersion str
 
@@ -108,15 +111,16 @@ installMethod tool version = do
 
   case tool of
     PureScript -> Tarball
-      { source: formatGitHub' case platform of
+      { source: formatGitHub' (fold [ "v", versionStr ]) case platform of
           Windows -> "win64"
           Mac -> "macos"
           Linux -> "linux64"
       , getExecutablePath: \p -> Path.concat [ p, "purescript", executableName ]
+      , version: versionStr
       }
 
     Spago -> Tarball
-      { source: formatGitHub'
+      { source: formatGitHub' versionStr 
           -- Spago has changed naming conventions from version to version
           if version >= unsafeVersion "0.18.1" then case platform of
             Windows -> "Windows"
@@ -131,6 +135,7 @@ installMethod tool version = do
             Mac -> "osx"
             Linux -> "linux"
       , getExecutablePath: \p -> Path.concat [ p, executableName ]
+      , version: versionStr
       }
 
     Psa ->
@@ -140,25 +145,14 @@ installMethod tool version = do
       NPM ("purs-tidy@" <> Version.showVersion version)
 
     Zephyr -> Tarball
-      { source: formatGitHub' $ case platform of
+      { source: formatGitHub' (fold [ "v", versionStr ]) $ case platform of
           Windows -> "Windows"
           Mac -> "macOS"
           Linux -> "Linux"
       , getExecutablePath: \p -> Path.concat [ p, "zephyr", executableName ]
+      , version: versionStr
       }
   where
-  -- Format the release tag for a tool at a specific version. Not all tools use
-  -- the same format.
-  --
-  -- Example: "v0.13.2", "0.15.2"
-  formatTag :: String
-  formatTag = do
-    let versionStr = Version.showVersion version
-    if tool `elem` [ PureScript, Zephyr, Psa ] then
-      fold [ "v", versionStr ]
-    else
-      versionStr
-
   formatGitHub :: { repo :: ToolRepository, tag :: String, tarball :: String } -> String
   formatGitHub { repo, tag, tarball } =
     -- Example: https://github.com/purescript/purescript/releases/download/v0.13.8/win64.tar.gz

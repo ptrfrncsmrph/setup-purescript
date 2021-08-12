@@ -5,8 +5,6 @@ import Prelude
 import Control.Monad.Except.Trans (ExceptT, mapExceptT)
 import Data.Foldable (fold)
 import Data.Maybe (Maybe(..))
-import Data.Version (Version)
-import Data.Version as Version
 import Effect.Aff (Aff)
 import Effect.Class (liftEffect)
 import Effect.Exception (Error)
@@ -17,17 +15,16 @@ import Setup.Data.Platform (Platform(..), platform)
 import Setup.Data.Tool (InstallMethod(..), Tool)
 import Setup.Data.Tool as Tool
 
-getTool :: { tool :: Tool, version :: Version } -> ExceptT Error Aff Unit
-getTool { tool, version } = do
+getTool :: { tool :: Tool, installMethod :: InstallMethod } -> ExceptT Error Aff Unit
+getTool { tool, installMethod } = do
   let
     name = Tool.name tool
-    installMethod = Tool.installMethod tool version
 
   liftEffect $ Core.info $ fold [ "Fetching ", name ]
 
   case installMethod of
     Tarball opts -> do
-      mbPath <- mapExceptT liftEffect $ ToolCache.find { arch: Nothing, toolName: name, versionSpec: Version.showVersion version }
+      mbPath <- mapExceptT liftEffect $ ToolCache.find { arch: Nothing, toolName: name, versionSpec: opts.version }
       case mbPath of
         Just path -> liftEffect do
           Core.info $ fold [ "Found cached version of ", name ]
@@ -36,7 +33,7 @@ getTool { tool, version } = do
         Nothing -> do
           downloadPath <- ToolCache.downloadTool' opts.source
           extractedPath <- ToolCache.extractTar' downloadPath
-          cached <- ToolCache.cacheFile { sourceFile: opts.getExecutablePath extractedPath, tool: name, version: Version.showVersion version, targetFile: name, arch: Nothing }
+          cached <- ToolCache.cacheFile { sourceFile: opts.getExecutablePath extractedPath, tool: name, version: opts.version, targetFile: name, arch: Nothing }
 
           liftEffect do
             Core.info $ fold [ "Cached path ", cached, ", adding to PATH" ]
