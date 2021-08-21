@@ -9,8 +9,7 @@ import Data.Foldable (elem, fold)
 import Data.Generic.Rep (class Generic)
 import Data.Bounded.Generic (genericBottom, genericTop)
 import Data.Enum.Generic (genericPred, genericSucc)
-import Data.Version (Version, parseVersion)
-import Data.Version as Version
+import Data.Version (parseVersion)
 import Node.Path (FilePath)
 import Node.Path as Path
 import Partial.Unsafe (unsafeCrashWith)
@@ -91,14 +90,14 @@ type NPMPackage = String
 
 -- | The installation method for a tool, which includes the source path necessary
 -- | to download or install the tool.
-installMethod :: Tool -> Version -> InstallMethod
-installMethod tool version = do
+installMethod :: Tool -> String -> InstallMethod
+installMethod tool versionStr = do
   let
     toolName = name tool
     toolRepo = repository tool
-    formatArgs = { repo: toolRepo, tag: formatTag, tarball: _ }
+    formatArgs = { repo: toolRepo, tag: _, tarball: _ }
 
-    formatGitHub' = formatGitHub <<< formatArgs
+    formatGitHub' = map formatGitHub <<< formatArgs
 
     unsafeVersion str = fromRight' (\_ -> unsafeCrashWith "Unexpected Left") $ parseVersion str
 
@@ -108,7 +107,7 @@ installMethod tool version = do
 
   case tool of
     PureScript -> Tarball
-      { source: formatGitHub' case platform of
+      { source: formatGitHub' ("v" <> versionStr) case platform of
           Windows -> "win64"
           Mac -> "macos"
           Linux -> "linux64"
@@ -116,13 +115,13 @@ installMethod tool version = do
       }
 
     Spago -> Tarball
-      { source: formatGitHub'
+      { source: formatGitHub' versionStr
           -- Spago has changed naming conventions from version to version
-          if version >= unsafeVersion "0.18.1" then case platform of
+          if unsafeVersion versionStr >= unsafeVersion "0.18.1" then case platform of
             Windows -> "Windows"
             Mac -> "macOS"
             Linux -> "Linux"
-          else if version == unsafeVersion "0.18.0" then case platform of
+          else if unsafeVersion versionStr == unsafeVersion "0.18.0" then case platform of
             Windows -> "windows-latest"
             Mac -> "macOS-latest"
             Linux -> "linux-latest"
@@ -134,31 +133,19 @@ installMethod tool version = do
       }
 
     Psa ->
-      NPM ("purescript-psa@" <> Version.showVersion version)
+      NPM ("purescript-psa@" <> versionStr)
 
     PursTidy ->
-      NPM ("purs-tidy@" <> Version.showVersion version)
+      NPM ("purs-tidy@" <> versionStr)
 
     Zephyr -> Tarball
-      { source: formatGitHub' $ case platform of
+      { source: formatGitHub' ("v" <> versionStr) case platform of
           Windows -> "Windows"
           Mac -> "macOS"
           Linux -> "Linux"
       , getExecutablePath: \p -> Path.concat [ p, "zephyr", executableName ]
       }
   where
-  -- Format the release tag for a tool at a specific version. Not all tools use
-  -- the same format.
-  --
-  -- Example: "v0.13.2", "0.15.2"
-  formatTag :: String
-  formatTag = do
-    let versionStr = Version.showVersion version
-    if tool `elem` [ PureScript, Zephyr, Psa ] then
-      fold [ "v", versionStr ]
-    else
-      versionStr
-
   formatGitHub :: { repo :: ToolRepository, tag :: String, tarball :: String } -> String
   formatGitHub { repo, tag, tarball } =
     -- Example: https://github.com/purescript/purescript/releases/download/v0.13.8/win64.tar.gz
