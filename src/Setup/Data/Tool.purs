@@ -97,7 +97,7 @@ installMethod tool versionStr = do
     toolRepo = repository tool
     formatArgs = { repo: toolRepo, tag: _, tarball: _ }
 
-    formatGitHub' = map formatGitHub <<< formatArgs
+    formatGitHub' tag tarball = formatGitHub (formatArgs tag tarball)
 
     unsafeVersion str = fromRight' (\_ -> unsafeCrashWith "Unexpected Left") $ parseVersion str
 
